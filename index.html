@@ -115,6 +115,7 @@
   </div>
   <div class="card hidden" id="quizCard">
     <div class="video-title" id="quizQuestion"></div>
+    <img id="quizQuestionImage" class="hidden" style="width:100%; border-radius:10px; margin-bottom:12px;">
     <div id="quizOptions"></div>
     <button id="submitAnswerBtn" onclick="submitAnswer()" disabled>Jawab Submit Karo</button>
     <div id="quizMsg"></div>
@@ -174,10 +175,16 @@
     <input type="text" id="newVideoTitle" placeholder="Video title">
     <div class="small" style="margin-bottom:8px;">Question:</div>
     <input type="text" id="newQuestion" placeholder="Question video se related">
-    <input type="text" id="optA" placeholder="Option A">
-    <input type="text" id="optB" placeholder="Option B">
-    <input type="text" id="optC" placeholder="Option C">
-    <input type="text" id="optD" placeholder="Option D">
+    <input type="text" id="newQuestionImage" placeholder="Question ki photo ka link (optional — jaise 'ye photo kitni baar aayi?')">
+    <div class="small" style="margin:6px 0;">Options (agar photo-wale options chahiye jaise "last photo konsi thi", toh har option ke saath uski photo ka link bhi daalo):</div>
+    <input type="text" id="optA" placeholder="Option A (text)">
+    <input type="text" id="optAImage" placeholder="Option A photo link (optional)">
+    <input type="text" id="optB" placeholder="Option B (text)">
+    <input type="text" id="optBImage" placeholder="Option B photo link (optional)">
+    <input type="text" id="optC" placeholder="Option C (text)">
+    <input type="text" id="optCImage" placeholder="Option C photo link (optional)">
+    <input type="text" id="optD" placeholder="Option D (text)">
+    <input type="text" id="optDImage" placeholder="Option D photo link (optional)">
     <select id="correctOpt">
       <option value="a">Sahi jawab: A</option>
       <option value="b">Sahi jawab: B</option>
@@ -329,13 +336,28 @@ function showQuiz() {
   const card = document.getElementById('quizCard');
   card.classList.remove('hidden');
   document.getElementById('quizQuestion').innerText = currentVideo.question.question;
+
+  // agar question ke saath reference photo hai (jaise "ye photo kitni baar aayi?")
+  const qImgEl = document.getElementById('quizQuestionImage');
+  if (currentVideo.question.question_image) {
+    qImgEl.src = currentVideo.question.question_image;
+    qImgEl.classList.remove('hidden');
+  } else {
+    qImgEl.classList.add('hidden');
+  }
+
   const optsEl = document.getElementById('quizOptions');
   optsEl.innerHTML = '';
   ['a','b','c','d'].forEach(k => {
     const label = currentVideo.question['option_' + k];
+    const imgUrl = currentVideo.question['option_' + k + '_image'];
     const div = document.createElement('div');
     div.className = 'option';
-    div.innerText = label;
+    if (imgUrl) {
+      div.innerHTML = `<img src="${imgUrl}" style="width:100%; border-radius:8px; margin-bottom:6px; display:block;"><span>${label}</span>`;
+    } else {
+      div.innerText = label;
+    }
     div.onclick = () => selectOption(k, div);
     optsEl.appendChild(div);
   });
@@ -473,10 +495,15 @@ async function addVideo() {
   const url = document.getElementById('newVideoUrl').value.trim();
   const title = document.getElementById('newVideoTitle').value.trim();
   const question = document.getElementById('newQuestion').value.trim();
+  const questionImage = document.getElementById('newQuestionImage').value.trim();
   const a = document.getElementById('optA').value.trim();
+  const aImg = document.getElementById('optAImage').value.trim();
   const b = document.getElementById('optB').value.trim();
+  const bImg = document.getElementById('optBImage').value.trim();
   const c = document.getElementById('optC').value.trim();
+  const cImg = document.getElementById('optCImage').value.trim();
   const d = document.getElementById('optD').value.trim();
+  const dImg = document.getElementById('optDImage').value.trim();
   const correct = document.getElementById('correctOpt').value;
   const dailyCap = parseInt(document.getElementById('newDailyCap').value) || null;
   const msgEl = document.getElementById('addVideoMsg');
@@ -494,13 +521,18 @@ async function addVideo() {
   if (vErr) { msgEl.innerHTML = '<div class="msg error">Video add nahi hua</div>'; return; }
 
   const { error: qErr } = await sb.from('questions').insert({
-    video_id: video.id, question, option_a: a, option_b: b, option_c: c, option_d: d, correct_option: correct
+    video_id: video.id, question, question_image: questionImage || null,
+    option_a: a, option_a_image: aImg || null,
+    option_b: b, option_b_image: bImg || null,
+    option_c: c, option_c_image: cImg || null,
+    option_d: d, option_d_image: dImg || null,
+    correct_option: correct
   });
 
   if (qErr) { msgEl.innerHTML = '<div class="msg error">Question add nahi hua</div>'; return; }
 
   msgEl.innerHTML = '<div class="msg success">✅ Video aur question add ho gaya!</div>';
-  ['newVideoUrl','newVideoTitle','newQuestion','optA','optB','optC','optD'].forEach(id => document.getElementById(id).value = '');
+  ['newVideoUrl','newVideoTitle','newQuestion','newQuestionImage','optA','optAImage','optB','optBImage','optC','optCImage','optD','optDImage'].forEach(id => document.getElementById(id).value = '');
   loadAdminData();
 }
 
