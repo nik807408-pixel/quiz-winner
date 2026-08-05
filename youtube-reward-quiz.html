@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Video Quiz Reward</title>
+<link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiVmlkZW8gUXVpeiBSZXdhcmQiLCJzaG9ydF9uYW1lIjoiUXVpelJld2FyZCIsInN0YXJ0X3VybCI6Ii4iLCJkaXNwbGF5Ijoic3RhbmRhbG9uZSIsImJhY2tncm91bmRfY29sb3IiOiIjMGYxNzJhIiwidGhlbWVfY29sb3IiOiIjMGYxNzJhIn0=">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#0f172a; --card:#1e293b; --accent:#22c55e; --accent2:#f59e0b;
+    --text:#f1f5f9; --muted:#94a3b8; --danger:#ef4444; --border:#334155;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:'Segoe UI', Roboto, sans-serif;
+    background:var(--bg); color:var(--text);
+    min-height:100vh; padding-bottom:70px;
+  }
+  header{
+    background:var(--card); padding:16px 20px; position:sticky; top:0; z-index:50;
+    border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;
+  }
+  header h1{font-size:18px;}
+  header .wallet{background:var(--accent); color:#052e16; padding:6px 14px; border-radius:20px; font-weight:700; font-size:14px;}
+  .container{padding:16px; max-width:600px; margin:0 auto;}
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:14px;
+    padding:16px; margin-bottom:16px;
+  }
+  .video-thumb{width:100%; border-radius:10px; margin-bottom:10px; aspect-ratio:16/9; object-fit:cover;}
+  .video-title{font-size:16px; font-weight:600; margin-bottom:6px;}
+  .video-meta{color:var(--muted); font-size:13px;}
+  button{
+    background:var(--accent); color:#052e16; border:none; padding:12px 18px;
+    border-radius:10px; font-weight:700; font-size:15px; cursor:pointer; width:100%;
+  }
+  button.secondary{background:transparent; border:1px solid var(--border); color:var(--text);}
+  button:disabled{opacity:0.5;}
+  input, select{
+    width:100%; padding:12px; border-radius:10px; border:1px solid var(--border);
+    background:#0b1220; color:var(--text); font-size:15px; margin-bottom:10px;
+  }
+  .yt-wrap{position:relative; width:100%; aspect-ratio:16/9; border-radius:10px; overflow:hidden; margin-bottom:12px;}
+  .yt-wrap iframe{position:absolute; top:0; left:0; width:100%; height:100%; border:0;}
+  .progress-bar{height:6px; background:var(--border); border-radius:4px; overflow:hidden; margin-bottom:14px;}
+  .progress-fill{height:100%; background:var(--accent); width:0%; transition:width .3s;}
+  .quiz-locked{color:var(--muted); text-align:center; padding:20px; font-size:14px;}
+  .option{
+    display:block; background:#0b1220; border:1px solid var(--border); border-radius:10px;
+    padding:12px; margin-bottom:8px; cursor:pointer; font-size:15px;
+  }
+  .option.selected{border-color:var(--accent2); background:#1c1305;}
+  .option.correct{border-color:var(--accent); background:#052e16;}
+  .option.wrong{border-color:var(--danger); background:#2e0505;}
+  .badge{display:inline-block; padding:3px 10px; border-radius:20px; font-size:12px; font-weight:700;}
+  .badge.win{background:var(--accent); color:#052e16;}
+  .badge.pending{background:#334155; color:var(--muted);}
+  .msg{padding:12px; border-radius:10px; margin-bottom:12px; font-size:14px;}
+  .msg.success{background:#052e16; border:1px solid var(--accent); color:var(--accent);}
+  .msg.error{background:#2e0505; border:1px solid var(--danger); color:#fca5a5;}
+  .tabbar{
+    position:fixed; bottom:0; left:0; right:0; background:var(--card); border-top:1px solid var(--border);
+    display:flex; z-index:50;
+  }
+  .tabbar button{background:none; color:var(--muted); border-radius:0; padding:12px 0; font-size:13px;}
+  .tabbar button.active{color:var(--accent);}
+  .hidden{display:none !important;}
+  .center{text-align:center;}
+  .small{font-size:12px; color:var(--muted);}
+  .winner-row{display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--border); font-size:14px;}
+  .loading{text-align:center; padding:40px; color:var(--muted);}
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,0.7); display:flex; align-items:center;
+    justify-content:center; z-index:100; padding:20px;
+  }
+  .modal{background:var(--card); border-radius:14px; padding:20px; max-width:400px; width:100%;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎬 Video Quiz Reward</h1>
+
+</header>
+
+<div class="modal-overlay" id="policyModal">
+  <div class="modal" style="max-height:85vh; overflow-y:auto;">
+    <div class="video-title" style="margin-bottom:12px;">Terms & Policy</div>
+    <div class="small" style="line-height:1.6; margin-bottom:16px;">
+      <p style="margin-bottom:10px;"><b>1. Nature of Service:</b> This application offers a free, knowledge-based quiz relating to our YouTube video content. Participation is entirely free of charge — no purchase, payment, deposit, or fee of any kind is required at any stage.</p>
+      <p style="margin-bottom:10px;"><b>2. Reward Mechanism:</b> Rewards are granted solely on the basis of correctly answering quiz questions. This constitutes a skill-and-knowledge-based contest. No element of chance, random selection, draw, or lottery is involved in determining reward recipients. Reward amounts and daily limits are subject to change at the operator's discretion without prior notice.</p>
+      <p style="margin-bottom:10px;"><b>3. Video Viewing:</b> Viewing the associated YouTube video is entirely optional. It is not a condition for participating in the quiz or for receiving any reward.</p>
+      <p style="margin-bottom:10px;"><b>4. Data Collection & Privacy:</b> We collect only your mobile number, and only at the point of reward claim. This information is used exclusively for reward tracking, disbursement, and prevention of duplicate claims. It will not be used for marketing, shared with, or sold to any third party. You may request deletion of your data at any time by contacting the operator.</p>
+      <p style="margin-bottom:10px;"><b>5. Fair Participation:</b> Each mobile number is eligible for one reward per video per day. The use of multiple accounts, false identities, automated tools, or any other means to circumvent this limit is prohibited and will result in forfeiture of rewards and disqualification.</p>
+      <p style="margin-bottom:10px;"><b>6. Disclaimer & Modification:</b> This service is provided on an "as is" basis. The operator reserves the right to modify, suspend, or discontinue the service, in whole or in part, at any time without liability. Participation does not create any contractual entitlement to future rewards.</p>
+    </div>
+    <label style="display:flex; align-items:flex-start; gap:8px; margin-bottom:14px; cursor:pointer;">
+      <input type="checkbox" id="policyAgreeCheckbox" style="width:auto; margin:2px 0 0 0;">
+      <span class="small">I have read and agree to the above terms.</span>
+    </label>
+    <button id="policyAgreeBtn" onclick="agreeToPolicy()" disabled>Continue / Aage Badho</button>
+  </div>
+</div>
+
+<div class="container hidden" id="homeScreen">
+  <div id="videoList" class="loading">Loading videos...</div>
+</div>
+
+<div class="container hidden" id="watchScreen">
+  <button class="secondary" style="width:auto; padding:8px 14px; margin-bottom:12px;" onclick="goHome()">← Wapas</button>
+  <div class="card">
+    <div class="video-title" id="watchTitle"></div>
+    <div class="small">Video YouTube pe dekho — ye link tumhe video ke beech mein mila hoga, seedha quiz ke liye hai</div>
+  </div>
+  <div class="card hidden" id="quizCard">
+    <div class="video-title" id="quizQuestion"></div>
+    <div id="quizOptions"></div>
+    <button id="submitAnswerBtn" onclick="submitAnswer()" disabled>Jawab Submit Karo</button>
+    <div id="quizMsg"></div>
+  </div>
+  <div class="card hidden" id="claimCard">
+    <div class="video-title">🎉 Sahi Jawab! Reward claim karne ke liye number daalo</div>
+    <p class="small" style="margin-bottom:12px;">₹2 isi number pe track hoga jab payout hoga</p>
+    <input type="tel" id="claimPhone" placeholder="10-digit mobile number" maxlength="10">
+    <label style="display:flex; align-items:flex-start; gap:8px; margin-bottom:12px; cursor:pointer;">
+      <input type="checkbox" id="consentCheckbox" style="width:auto; margin:2px 0 0 0;">
+      <span class="small">I agree to share my phone number solely for the purpose of tracking and processing this reward. It will not be used for any other purpose.</span>
+    </label>
+    <button onclick="claimReward()">Reward Claim Karo</button>
+    <div id="claimMsg"></div>
+  </div>
+</div>
+
+
+<div class="container hidden" id="winnersScreen">
+  <div class="card">
+    <div class="video-title">🏆 Aaj ke Winners</div>
+    <div id="winnersList" class="loading">Loading...</div>
+  </div>
+</div>
+
+<div class="container hidden" id="walletScreen">
+  <div class="card">
+    <div class="video-title">💰 Balance Check Karo</div>
+    <input type="tel" id="walletPhoneInput" placeholder="10-digit mobile number" maxlength="10">
+    <button onclick="checkWallet()">Check Karo</button>
+    <div id="walletCheckMsg"></div>
+  </div>
+</div>
+
+<div class="tabbar" id="tabbar">
+  <button class="active" onclick="showTab('home')" id="tabHome">🏠 Home</button>
+  <button onclick="showTab('winners')" id="tabWinners">🏆 Winners</button>
+  <button onclick="showTab('wallet')" id="tabWallet">💰 Balance</button>
+  <button onclick="showTab('admin')" id="tabAdmin">⚙️ Admin</button>
+</div>
+
+<!-- Admin login modal -->
+<div class="modal-overlay hidden" id="adminModal">
+  <div class="modal">
+    <div class="video-title">Admin Login</div>
+    <input type="password" id="adminPass" placeholder="Admin password">
+    <button onclick="adminLogin()">Login</button>
+    <button class="secondary" style="margin-top:8px;" onclick="closeAdminModal()">Cancel</button>
+    <div id="adminLoginMsg"></div>
+  </div>
+</div>
+
+<div class="container hidden" id="adminScreen">
+  <div class="card">
+    <div class="video-title">➕ Naya Video Add Karo</div>
+    <input type="text" id="newVideoUrl" placeholder="YouTube video URL">
+    <input type="text" id="newVideoTitle" placeholder="Video title">
+    <div class="small" style="margin-bottom:8px;">Question:</div>
+    <input type="text" id="newQuestion" placeholder="Question video se related">
+    <input type="text" id="optA" placeholder="Option A">
+    <input type="text" id="optB" placeholder="Option B">
+    <input type="text" id="optC" placeholder="Option C">
+    <input type="text" id="optD" placeholder="Option D">
+    <select id="correctOpt">
+      <option value="a">Sahi jawab: A</option>
+      <option value="b">Sahi jawab: B</option>
+      <option value="c">Sahi jawab: C</option>
+      <option value="d">Sahi jawab: D</option>
+    </select>
+    <input type="number" id="newDailyCap" placeholder="Roz max kitne winners (jaise 50)" value="50">
+    <button onclick="addVideo()">Video Add Karo</button>
+    <div id="addVideoMsg"></div>
+  </div>
+
+  <div class="card">
+    <div class="video-title">🔗 Video Ka Link Nikalo</div>
+    <p class="small" style="margin-bottom:10px;">Ye link YouTube video ke description/comment mein daalo — click karte hi seedha uss video ke quiz pe khulega</p>
+    <select id="linkVideoSelect" onchange="showVideoLink()"></select>
+    <div id="videoLinkOutput" class="small" style="margin-top:10px; word-break:break-all;"></div>
+  </div>
+
+  <div class="card">
+    <div class="video-title">📋 Sab Videos</div>
+    <div id="adminVideoList" class="loading">Loading...</div>
+  </div>
+</div>
+
+<script>
+// ====== SETUP: apna Supabase project ka URL aur anon key yahan daalo ======
+const SUPABASE_URL = "https://btkcevukhpqkikfrhezm.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0a2NldnVraHBxa2lrZnJoZXptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5MjA3NzYsImV4cCI6MjEwMTQ5Njc3Nn0.OtHExuW2funzG-5Oo4kM4d1PzS6o-lr3H5Cjjp-ysKU";
+const ADMIN_PASSWORD = "change_this_password";
+const REWARD_AMOUNT = 2;
+// ============================================================================
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentVideo = null;
+let selectedOption = null;
+
+// helper: get-or-create a user row by phone, used only at reward-claim / wallet-check time
+async function getOrCreateUser(phone) {
+  let { data: existing } = await sb.from('users').select('*').eq('phone', phone).maybeSingle();
+  if (existing) return existing;
+  const { data: created, error } = await sb.from('users').insert({ phone }).select().single();
+  if (error) return null;
+  return created;
+}
+
+// ---------- DEEP LINK: ?v=VIDEO_ID directly opens that video's quiz ----------
+function getDeepLinkVideoId() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('v');
+}
+
+// ---------- TABS ----------
+function showTab(tab) {
+  ['homeScreen','watchScreen','winnersScreen','walletScreen','adminScreen'].forEach(id => document.getElementById(id).classList.add('hidden'));
+  ['tabHome','tabWinners','tabWallet','tabAdmin'].forEach(id => document.getElementById(id).classList.remove('active'));
+
+  if (tab === 'home') {
+    document.getElementById('homeScreen').classList.remove('hidden');
+    document.getElementById('tabHome').classList.add('active');
+    loadVideos();
+  } else if (tab === 'winners') {
+    document.getElementById('winnersScreen').classList.remove('hidden');
+    document.getElementById('tabWinners').classList.add('active');
+    loadWinners();
+  } else if (tab === 'wallet') {
+    document.getElementById('walletScreen').classList.remove('hidden');
+    document.getElementById('tabWallet').classList.add('active');
+  } else if (tab === 'admin') {
+    document.getElementById('tabAdmin').classList.add('active');
+    if (sessionStorage.getItem('isAdmin') === 'true') {
+      document.getElementById('adminScreen').classList.remove('hidden');
+      loadAdminData();
+    } else {
+      document.getElementById('adminModal').classList.remove('hidden');
+    }
+  }
+}
+
+function goHome(){ showTab('home'); }
+
+// ---------- ADMIN LOGIN ----------
+function adminLogin() {
+  const pass = document.getElementById('adminPass').value;
+  if (pass === ADMIN_PASSWORD) {
+    sessionStorage.setItem('isAdmin', 'true');
+    closeAdminModal();
+    document.getElementById('adminScreen').classList.remove('hidden');
+    loadAdminData();
+  } else {
+    document.getElementById('adminLoginMsg').innerHTML = '<div class="msg error">Galat password</div>';
+  }
+}
+function closeAdminModal() {
+  document.getElementById('adminModal').classList.add('hidden');
+  document.getElementById('adminPass').value = '';
+}
+
+// ---------- VIDEO LIST ----------
+async function loadVideos() {
+  const el = document.getElementById('videoList');
+  el.innerHTML = '<div class="loading">Loading videos...</div>';
+  const { data: videos, error } = await sb.from('videos').select('*').eq('active', true).order('created_at', { ascending: false });
+  if (error || !videos || videos.length === 0) {
+    el.innerHTML = '<div class="card center small">Abhi koi video available nahi hai</div>';
+    return;
+  }
+
+  // is device pe aaj kaunse videos already complete ho chuke hain (local hint only —
+  // asli duplicate-check backend pe phone number ki uniqueness se hota hai)
+  const today = new Date().toISOString().slice(0,10);
+  const doneKey = 'done_' + today;
+  const enteredIds = new Set(JSON.parse(localStorage.getItem(doneKey) || '[]'));
+
+  el.innerHTML = '';
+  videos.forEach(v => {
+    const done = enteredIds.has(v.id);
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.innerHTML = `
+      <img class="video-thumb" src="https://img.youtube.com/vi/${v.youtube_id}/hqdefault.jpg">
+      <div class="video-title">${v.title}</div>
+      <div class="video-meta">${done ? '<span class="badge win">✅ Aaj entry ho chuki hai</span>' : 'YouTube pe dekho — quiz ka link video ke beech mein milega'}</div>
+      <button style="margin-top:10px;" ${done ? 'disabled' : ''} onclick="window.open('${v.youtube_url}', '_blank')">${done ? 'Kal wapas aao' : 'YouTube Pe Dekho'}</button>
+    `;
+    el.appendChild(div);
+  });
+}
+
+// ---------- WATCH + QUIZ ----------
+async function openVideo(videoId) {
+  const { data: v } = await sb.from('videos').select('*').eq('id', videoId).single();
+  const { data: q } = await sb.from('questions').select('*').eq('video_id', videoId).limit(1).maybeSingle();
+  if (!v || !q) return;
+
+  currentVideo = { ...v, question: q };
+  selectedOption = null;
+
+  document.getElementById('homeScreen').classList.add('hidden');
+  document.getElementById('watchScreen').classList.remove('hidden');
+  document.getElementById('watchTitle').innerText = v.title;
+  document.getElementById('claimCard').classList.add('hidden');
+  document.getElementById('quizMsg').innerHTML = '';
+
+  showQuiz();
+}
+
+function showQuiz() {
+  const card = document.getElementById('quizCard');
+  card.classList.remove('hidden');
+  document.getElementById('quizQuestion').innerText = currentVideo.question.question;
+  const optsEl = document.getElementById('quizOptions');
+  optsEl.innerHTML = '';
+  ['a','b','c','d'].forEach(k => {
+    const label = currentVideo.question['option_' + k];
+    const div = document.createElement('div');
+    div.className = 'option';
+    div.innerText = label;
+    div.onclick = () => selectOption(k, div);
+    optsEl.appendChild(div);
+  });
+}
+
+
+function selectOption(key, el) {
+  document.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedOption = key;
+  document.getElementById('submitAnswerBtn').disabled = false;
+}
+
+async function submitAnswer() {
+  const msgEl = document.getElementById('quizMsg');
+  const btn = document.getElementById('submitAnswerBtn');
+  btn.disabled = true;
+
+  const correct = selectedOption === currentVideo.question.correct_option;
+  document.querySelectorAll('.option').forEach(o => {
+    if (o.classList.contains('selected')) o.classList.add(correct ? 'correct' : 'wrong');
+  });
+
+  if (!correct) {
+    msgEl.innerHTML = '<div class="msg error">❌ Galat jawab. Kal phir try karo!</div>';
+    return;
+  }
+
+  msgEl.innerHTML = '<div class="msg success">✅ Sahi jawab!</div>';
+  document.getElementById('claimCard').classList.remove('hidden');
+}
+
+// ---------- CLAIM REWARD (phone sirf ab, jab reward mil raha ho) ----------
+async function claimReward() {
+  const phone = document.getElementById('claimPhone').value.trim();
+  const msgEl = document.getElementById('claimMsg');
+  if (!/^\d{10}$/.test(phone)) {
+    msgEl.innerHTML = '<div class="msg error">Sahi 10-digit number daalo</div>';
+    return;
+  }
+  if (!document.getElementById('consentCheckbox').checked) {
+    msgEl.innerHTML = '<div class="msg error">Reward claim karne ke liye consent checkbox check karo</div>';
+    return;
+  }
+
+  const user = await getOrCreateUser(phone);
+  if (!user) {
+    msgEl.innerHTML = '<div class="msg error">Kuch gadbad hui, dobara try karo</div>';
+    return;
+  }
+
+  const today = new Date().toISOString().slice(0,10);
+
+  // daily budget cap check (video ke liye max winners set kiya hai admin ne)
+  const { count: winnersToday } = await sb.from('winners').select('*', { count: 'exact', head: true }).eq('video_id', currentVideo.id).eq('win_date', today);
+  if (currentVideo.daily_cap && winnersToday >= currentVideo.daily_cap) {
+    msgEl.innerHTML = '<div class="msg error">Aaj is video ka reward budget khatam ho gaya, kal try karo</div>';
+    return;
+  }
+
+  const { error } = await sb.from('entries').insert({
+    user_id: user.id,
+    video_id: currentVideo.id,
+    entry_date: today
+  });
+
+  if (error) {
+    if (error.code === '23505') {
+      msgEl.innerHTML = '<div class="msg error">Is number se is video ke liye aaj already reward le liya gaya hai</div>';
+    } else {
+      msgEl.innerHTML = '<div class="msg error">Kuch gadbad hui, dobara try karo</div>';
+    }
+    return;
+  }
+
+  // guaranteed reward — har sahi jawab wale ko milta hai, chance/draw nahi
+  await sb.from('winners').insert({
+    user_id: user.id, video_id: currentVideo.id, reward_amount: REWARD_AMOUNT, win_date: today
+  });
+  await sb.from('users').update({ wallet_balance: (user.wallet_balance || 0) + REWARD_AMOUNT }).eq('id', user.id);
+
+  const doneKey = 'done_' + today;
+  const doneList = JSON.parse(localStorage.getItem(doneKey) || '[]');
+  doneList.push(currentVideo.id);
+  localStorage.setItem(doneKey, JSON.stringify(doneList));
+
+  msgEl.innerHTML = '<div class="msg success">🎉 ₹' + REWARD_AMOUNT + ' mil gaya! Balance "Balance" tab mein apna number daal ke check karo.</div>';
+  document.getElementById('claimPhone').disabled = true;
+  document.querySelector('#claimCard button').disabled = true;
+}
+
+// ---------- WALLET CHECK ----------
+async function checkWallet() {
+  const phone = document.getElementById('walletPhoneInput').value.trim();
+  const msgEl = document.getElementById('walletCheckMsg');
+  if (!/^\d{10}$/.test(phone)) {
+    msgEl.innerHTML = '<div class="msg error">Sahi 10-digit number daalo</div>';
+    return;
+  }
+  const { data: user } = await sb.from('users').select('*').eq('phone', phone).maybeSingle();
+  if (!user) {
+    msgEl.innerHTML = '<div class="msg error">Ye number kisi entry mein nahi mila</div>';
+    return;
+  }
+  msgEl.innerHTML = `<div class="msg success">💰 Balance: ₹${user.wallet_balance}</div>`;
+}
+
+// ---------- WINNERS ----------
+async function loadWinners() {
+  const el = document.getElementById('winnersList');
+  el.innerHTML = '<div class="loading">Loading...</div>';
+  const today = new Date().toISOString().slice(0,10);
+  const { data: winners } = await sb
+    .from('winners')
+    .select('*, users(phone), videos(title)')
+    .eq('win_date', today)
+    .order('created_at', { ascending: false });
+
+  if (!winners || winners.length === 0) {
+    el.innerHTML = '<div class="center small">Aaj ka draw abhi hua nahi hai. Thodi der baad check karo.</div>';
+    return;
+  }
+  el.innerHTML = '';
+  winners.forEach(w => {
+    const maskedPhone = w.users.phone.slice(0,2) + 'XXXXXX' + w.users.phone.slice(-2);
+    const row = document.createElement('div');
+    row.className = 'winner-row';
+    row.innerHTML = `<span>${maskedPhone} — ${w.videos.title}</span><span class="badge win">+₹${w.reward_amount}</span>`;
+    el.appendChild(row);
+  });
+}
+
+// ---------- ADMIN ----------
+async function addVideo() {
+  const url = document.getElementById('newVideoUrl').value.trim();
+  const title = document.getElementById('newVideoTitle').value.trim();
+  const question = document.getElementById('newQuestion').value.trim();
+  const a = document.getElementById('optA').value.trim();
+  const b = document.getElementById('optB').value.trim();
+  const c = document.getElementById('optC').value.trim();
+  const d = document.getElementById('optD').value.trim();
+  const correct = document.getElementById('correctOpt').value;
+  const dailyCap = parseInt(document.getElementById('newDailyCap').value) || null;
+  const msgEl = document.getElementById('addVideoMsg');
+
+  const ytId = extractYouTubeId(url);
+  if (!ytId || !title || !question || !a || !b || !c || !d) {
+    msgEl.innerHTML = '<div class="msg error">Sab fields bharo, YouTube URL sahi daalo</div>';
+    return;
+  }
+
+  const { data: video, error: vErr } = await sb.from('videos').insert({
+    youtube_url: url, youtube_id: ytId, title, active: true, daily_cap: dailyCap
+  }).select().single();
+
+  if (vErr) { msgEl.innerHTML = '<div class="msg error">Video add nahi hua</div>'; return; }
+
+  const { error: qErr } = await sb.from('questions').insert({
+    video_id: video.id, question, option_a: a, option_b: b, option_c: c, option_d: d, correct_option: correct
+  });
+
+  if (qErr) { msgEl.innerHTML = '<div class="msg error">Question add nahi hua</div>'; return; }
+
+  msgEl.innerHTML = '<div class="msg success">✅ Video aur question add ho gaya!</div>';
+  ['newVideoUrl','newVideoTitle','newQuestion','optA','optB','optC','optD'].forEach(id => document.getElementById(id).value = '');
+  loadAdminData();
+}
+
+function extractYouTubeId(url) {
+  const m = url.match(/(?:youtu\.be\/|v=|\/shorts\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+let adminVideosCache = [];
+async function loadAdminData() {
+  const { data: videos } = await sb.from('videos').select('*').order('created_at', { ascending: false });
+  adminVideosCache = videos || [];
+  const listEl = document.getElementById('adminVideoList');
+  const selectEl = document.getElementById('linkVideoSelect');
+  selectEl.innerHTML = '';
+  listEl.innerHTML = '';
+
+  adminVideosCache.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v.id; opt.innerText = v.title;
+    selectEl.appendChild(opt);
+
+    const row = document.createElement('div');
+    row.className = 'winner-row';
+    row.innerHTML = `<span>${v.title}</span><span class="small">${v.active ? 'Active' : 'Inactive'}</span>`;
+    listEl.appendChild(row);
+  });
+  if (adminVideosCache.length) showVideoLink();
+}
+
+function showVideoLink() {
+  const videoId = document.getElementById('linkVideoSelect').value;
+  const base = window.location.origin + window.location.pathname;
+  document.getElementById('videoLinkOutput').innerText = base + '?v=' + videoId;
+}
+
+// ---------- POLICY / TERMS GATE ----------
+document.getElementById('policyAgreeCheckbox').addEventListener('change', function() {
+  document.getElementById('policyAgreeBtn').disabled = !this.checked;
+});
+
+function agreeToPolicy() {
+  localStorage.setItem('policy_agreed', 'true');
+  document.getElementById('policyModal').classList.add('hidden');
+  startApp();
+}
+
+// ---------- APP INIT: agar link mein ?v=VIDEO_ID hai toh seedha uss video ke quiz pe le jao ----------
+function startApp() {
+  document.getElementById('homeScreen').classList.remove('hidden');
+  const deepLinkId = getDeepLinkVideoId();
+  if (deepLinkId) {
+    document.getElementById('homeScreen').classList.add('hidden');
+    openVideo(deepLinkId);
+  } else {
+    loadVideos();
+  }
+}
+
+if (localStorage.getItem('policy_agreed') === 'true') {
+  document.getElementById('policyModal').classList.add('hidden');
+  startApp();
+}
+</script>
+</body>
+</html>
