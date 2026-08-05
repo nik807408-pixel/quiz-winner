@@ -175,16 +175,21 @@
     <input type="text" id="newVideoTitle" placeholder="Video title">
     <div class="small" style="margin-bottom:8px;">Question:</div>
     <input type="text" id="newQuestion" placeholder="Question video se related">
-    <input type="text" id="newQuestionImage" placeholder="Question ki photo ka link (optional — jaise 'ye photo kitni baar aayi?')">
-    <div class="small" style="margin:6px 0;">Options (agar photo-wale options chahiye jaise "last photo konsi thi", toh har option ke saath uski photo ka link bhi daalo):</div>
+    <div class="small">Question ki photo (optional — jaise "ye photo kitni baar aayi?"):</div>
+    <input type="file" id="newQuestionImage" accept="image/*" style="margin-bottom:10px;">
+    <div class="small" style="margin:6px 0;">Options (agar photo-wale options chahiye jaise "last photo konsi thi", toh har option ke saath uski photo bhi select karo):</div>
     <input type="text" id="optA" placeholder="Option A (text)">
-    <input type="text" id="optAImage" placeholder="Option A photo link (optional)">
+    <div class="small">Option A photo (optional):</div>
+    <input type="file" id="optAImage" accept="image/*" style="margin-bottom:10px;">
     <input type="text" id="optB" placeholder="Option B (text)">
-    <input type="text" id="optBImage" placeholder="Option B photo link (optional)">
+    <div class="small">Option B photo (optional):</div>
+    <input type="file" id="optBImage" accept="image/*" style="margin-bottom:10px;">
     <input type="text" id="optC" placeholder="Option C (text)">
-    <input type="text" id="optCImage" placeholder="Option C photo link (optional)">
+    <div class="small">Option C photo (optional):</div>
+    <input type="file" id="optCImage" accept="image/*" style="margin-bottom:10px;">
     <input type="text" id="optD" placeholder="Option D (text)">
-    <input type="text" id="optDImage" placeholder="Option D photo link (optional)">
+    <div class="small">Option D photo (optional):</div>
+    <input type="file" id="optDImage" accept="image/*" style="margin-bottom:10px;">
     <select id="correctOpt">
       <option value="a">Sahi jawab: A</option>
       <option value="b">Sahi jawab: B</option>
@@ -490,20 +495,33 @@ async function loadWinners() {
   });
 }
 
+// ---------- IMAGE UPLOAD (Supabase Storage) ----------
+async function uploadImageIfSelected(inputId) {
+  const fileInput = document.getElementById(inputId);
+  const file = fileInput.files[0];
+  if (!file) return null;
+
+  const ext = file.name.split('.').pop();
+  const path = `${inputId}-${Date.now()}.${ext}`;
+
+  const { error } = await sb.storage.from('quiz-images').upload(path, file);
+  if (error) {
+    console.error('Upload failed:', error);
+    return null;
+  }
+  const { data } = sb.storage.from('quiz-images').getPublicUrl(path);
+  return data.publicUrl;
+}
+
 // ---------- ADMIN ----------
 async function addVideo() {
   const url = document.getElementById('newVideoUrl').value.trim();
   const title = document.getElementById('newVideoTitle').value.trim();
   const question = document.getElementById('newQuestion').value.trim();
-  const questionImage = document.getElementById('newQuestionImage').value.trim();
   const a = document.getElementById('optA').value.trim();
-  const aImg = document.getElementById('optAImage').value.trim();
   const b = document.getElementById('optB').value.trim();
-  const bImg = document.getElementById('optBImage').value.trim();
   const c = document.getElementById('optC').value.trim();
-  const cImg = document.getElementById('optCImage').value.trim();
   const d = document.getElementById('optD').value.trim();
-  const dImg = document.getElementById('optDImage').value.trim();
   const correct = document.getElementById('correctOpt').value;
   const dailyCap = parseInt(document.getElementById('newDailyCap').value) || null;
   const msgEl = document.getElementById('addVideoMsg');
@@ -514,6 +532,17 @@ async function addVideo() {
     return;
   }
 
+  msgEl.innerHTML = '<div class="small">Photos upload ho rahi hain, thoda ruko...</div>';
+
+  // saari selected photos upload karo (jo nahi selected, unke liye null milega)
+  const [questionImage, aImg, bImg, cImg, dImg] = await Promise.all([
+    uploadImageIfSelected('newQuestionImage'),
+    uploadImageIfSelected('optAImage'),
+    uploadImageIfSelected('optBImage'),
+    uploadImageIfSelected('optCImage'),
+    uploadImageIfSelected('optDImage')
+  ]);
+
   const { data: video, error: vErr } = await sb.from('videos').insert({
     youtube_url: url, youtube_id: ytId, title, active: true, daily_cap: dailyCap
   }).select().single();
@@ -521,18 +550,19 @@ async function addVideo() {
   if (vErr) { msgEl.innerHTML = '<div class="msg error">Video add nahi hua</div>'; return; }
 
   const { error: qErr } = await sb.from('questions').insert({
-    video_id: video.id, question, question_image: questionImage || null,
-    option_a: a, option_a_image: aImg || null,
-    option_b: b, option_b_image: bImg || null,
-    option_c: c, option_c_image: cImg || null,
-    option_d: d, option_d_image: dImg || null,
+    video_id: video.id, question, question_image: questionImage,
+    option_a: a, option_a_image: aImg,
+    option_b: b, option_b_image: bImg,
+    option_c: c, option_c_image: cImg,
+    option_d: d, option_d_image: dImg,
     correct_option: correct
   });
 
   if (qErr) { msgEl.innerHTML = '<div class="msg error">Question add nahi hua</div>'; return; }
 
-  msgEl.innerHTML = '<div class="msg success">✅ Video aur question add ho gaya!</div>';
-  ['newVideoUrl','newVideoTitle','newQuestion','newQuestionImage','optA','optAImage','optB','optBImage','optC','optCImage','optD','optDImage'].forEach(id => document.getElementById(id).value = '');
+  msgEl.innerHTML = '<div class="msg success">✅ Video, question aur photos add ho gayi!</div>';
+  ['newVideoUrl','newVideoTitle','newQuestion','optA','optB','optC','optD'].forEach(id => document.getElementById(id).value = '');
+  ['newQuestionImage','optAImage','optBImage','optCImage','optDImage'].forEach(id => document.getElementById(id).value = '');
   loadAdminData();
 }
 
