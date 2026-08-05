@@ -176,20 +176,25 @@
     <div class="small" style="margin-bottom:8px;">Question:</div>
     <input type="text" id="newQuestion" placeholder="Question video se related">
     <div class="small">Question ki photo (optional — jaise "ye photo kitni baar aayi?"):</div>
-    <input type="file" id="newQuestionImage" accept="image/*" style="margin-bottom:10px;">
+    <input type="file" id="newQuestionImage" accept="image/*" onchange="previewImage(this,'newQuestionImagePreview')" style="margin-bottom:6px;">
+    <img id="newQuestionImagePreview" class="hidden" style="width:120px; border-radius:8px; margin-bottom:10px; display:block;">
     <div class="small" style="margin:6px 0;">Options (agar photo-wale options chahiye jaise "last photo konsi thi", toh har option ke saath uski photo bhi select karo):</div>
     <input type="text" id="optA" placeholder="Option A (text)">
     <div class="small">Option A photo (optional):</div>
-    <input type="file" id="optAImage" accept="image/*" style="margin-bottom:10px;">
+    <input type="file" id="optAImage" accept="image/*" onchange="previewImage(this,'optAImagePreview')" style="margin-bottom:6px;">
+    <img id="optAImagePreview" class="hidden" style="width:120px; border-radius:8px; margin-bottom:10px; display:block;">
     <input type="text" id="optB" placeholder="Option B (text)">
     <div class="small">Option B photo (optional):</div>
-    <input type="file" id="optBImage" accept="image/*" style="margin-bottom:10px;">
+    <input type="file" id="optBImage" accept="image/*" onchange="previewImage(this,'optBImagePreview')" style="margin-bottom:6px;">
+    <img id="optBImagePreview" class="hidden" style="width:120px; border-radius:8px; margin-bottom:10px; display:block;">
     <input type="text" id="optC" placeholder="Option C (text)">
     <div class="small">Option C photo (optional):</div>
-    <input type="file" id="optCImage" accept="image/*" style="margin-bottom:10px;">
+    <input type="file" id="optCImage" accept="image/*" onchange="previewImage(this,'optCImagePreview')" style="margin-bottom:6px;">
+    <img id="optCImagePreview" class="hidden" style="width:120px; border-radius:8px; margin-bottom:10px; display:block;">
     <input type="text" id="optD" placeholder="Option D (text)">
     <div class="small">Option D photo (optional):</div>
-    <input type="file" id="optDImage" accept="image/*" style="margin-bottom:10px;">
+    <input type="file" id="optDImage" accept="image/*" onchange="previewImage(this,'optDImagePreview')" style="margin-bottom:6px;">
+    <img id="optDImagePreview" class="hidden" style="width:120px; border-radius:8px; margin-bottom:10px; display:block;">
     <select id="correctOpt">
       <option value="a">Sahi jawab: A</option>
       <option value="b">Sahi jawab: B</option>
@@ -199,6 +204,40 @@
     <input type="number" id="newDailyCap" placeholder="Roz max kitne winners (jaise 50)" value="50">
     <button onclick="addVideo()">Video Add Karo</button>
     <div id="addVideoMsg"></div>
+  </div>
+
+  <div class="card">
+    <div class="video-title">➕ Isi Video Mein Aur Question Add Karo</div>
+    <p class="small" style="margin-bottom:10px;">Ek video mein kai questions ho sakte hain — user ko sabhi ke sahi jawab dene honge tabhi reward milega</p>
+    <select id="addQVideoSelect"></select>
+    <input type="text" id="addQQuestion" placeholder="Question video se related">
+    <div class="small">Question ki photo (optional):</div>
+    <input type="file" id="addQQuestionImage" accept="image/*" onchange="previewImage(this,'addQQuestionImagePreview')" style="margin-bottom:6px;">
+    <img id="addQQuestionImagePreview" class="hidden" style="width:120px; border-radius:8px; margin-bottom:10px; display:block;">
+    <input type="text" id="addQOptA" placeholder="Option A (text)">
+    <div class="small">Option A photo (optional):</div>
+    <input type="file" id="addQOptAImage" accept="image/*" onchange="previewImage(this,'addQOptAImagePreview')" style="margin-bottom:6px;">
+    <img id="addQOptAImagePreview" class="hidden" style="width:120px; border-radius:8px; margin-bottom:10px; display:block;">
+    <input type="text" id="addQOptB" placeholder="Option B (text)">
+    <div class="small">Option B photo (optional):</div>
+    <input type="file" id="addQOptBImage" accept="image/*" onchange="previewImage(this,'addQOptBImagePreview')" style="margin-bottom:6px;">
+    <img id="addQOptBImagePreview" class="hidden" style="width:120px; border-radius:8px; margin-bottom:10px; display:block;">
+    <input type="text" id="addQOptC" placeholder="Option C (text)">
+    <div class="small">Option C photo (optional):</div>
+    <input type="file" id="addQOptCImage" accept="image/*" onchange="previewImage(this,'addQOptCImagePreview')" style="margin-bottom:6px;">
+    <img id="addQOptCImagePreview" class="hidden" style="width:120px; border-radius:8px; margin-bottom:10px; display:block;">
+    <input type="text" id="addQOptD" placeholder="Option D (text)">
+    <div class="small">Option D photo (optional):</div>
+    <input type="file" id="addQOptDImage" accept="image/*" onchange="previewImage(this,'addQOptDImagePreview')" style="margin-bottom:6px;">
+    <img id="addQOptDImagePreview" class="hidden" style="width:120px; border-radius:8px; margin-bottom:10px; display:block;">
+    <select id="addQCorrectOpt">
+      <option value="a">Sahi jawab: A</option>
+      <option value="b">Sahi jawab: B</option>
+      <option value="c">Sahi jawab: C</option>
+      <option value="d">Sahi jawab: D</option>
+    </select>
+    <button onclick="addQuestionToVideo()">Question Add Karo</button>
+    <div id="addQMsg"></div>
   </div>
 
   <div class="card">
@@ -226,6 +265,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let currentVideo = null;
 let selectedOption = null;
+let currentQuestionIndex = 0;
 
 // helper: get-or-create a user row by phone, used only at reward-claim / wallet-check time
 async function getOrCreateUser(phone) {
@@ -322,10 +362,11 @@ async function loadVideos() {
 // ---------- WATCH + QUIZ ----------
 async function openVideo(videoId) {
   const { data: v } = await sb.from('videos').select('*').eq('id', videoId).single();
-  const { data: q } = await sb.from('questions').select('*').eq('video_id', videoId).limit(1).maybeSingle();
-  if (!v || !q) return;
+  const { data: qs } = await sb.from('questions').select('*').eq('video_id', videoId).order('created_at', { ascending: true });
+  if (!v || !qs || qs.length === 0) return;
 
-  currentVideo = { ...v, question: q };
+  currentVideo = { ...v, questions: qs };
+  currentQuestionIndex = 0;
   selectedOption = null;
 
   document.getElementById('homeScreen').classList.add('hidden');
@@ -338,14 +379,21 @@ async function openVideo(videoId) {
 }
 
 function showQuiz() {
+  const q = currentVideo.questions[currentQuestionIndex];
+  const total = currentVideo.questions.length;
+  selectedOption = null;
+  document.getElementById('submitAnswerBtn').disabled = true;
+  document.getElementById('quizMsg').innerHTML = '';
+
   const card = document.getElementById('quizCard');
   card.classList.remove('hidden');
-  document.getElementById('quizQuestion').innerText = currentVideo.question.question;
+  const qLabel = total > 1 ? `[Sawaal ${currentQuestionIndex + 1} / ${total}] ` : '';
+  document.getElementById('quizQuestion').innerText = qLabel + q.question;
 
   // agar question ke saath reference photo hai (jaise "ye photo kitni baar aayi?")
   const qImgEl = document.getElementById('quizQuestionImage');
-  if (currentVideo.question.question_image) {
-    qImgEl.src = currentVideo.question.question_image;
+  if (q.question_image) {
+    qImgEl.src = q.question_image;
     qImgEl.classList.remove('hidden');
   } else {
     qImgEl.classList.add('hidden');
@@ -354,8 +402,8 @@ function showQuiz() {
   const optsEl = document.getElementById('quizOptions');
   optsEl.innerHTML = '';
   ['a','b','c','d'].forEach(k => {
-    const label = currentVideo.question['option_' + k];
-    const imgUrl = currentVideo.question['option_' + k + '_image'];
+    const label = q['option_' + k];
+    const imgUrl = q['option_' + k + '_image'];
     const div = document.createElement('div');
     div.className = 'option';
     if (imgUrl) {
@@ -381,17 +429,29 @@ async function submitAnswer() {
   const btn = document.getElementById('submitAnswerBtn');
   btn.disabled = true;
 
-  const correct = selectedOption === currentVideo.question.correct_option;
+  const q = currentVideo.questions[currentQuestionIndex];
+  const correct = selectedOption === q.correct_option;
   document.querySelectorAll('.option').forEach(o => {
     if (o.classList.contains('selected')) o.classList.add(correct ? 'correct' : 'wrong');
   });
 
   if (!correct) {
-    msgEl.innerHTML = '<div class="msg error">❌ Galat jawab. Kal phir try karo!</div>';
+    msgEl.innerHTML = '<div class="msg error">❌ Galat jawab. Dobara try karo!</div>';
+    btn.disabled = false;
     return;
   }
 
-  msgEl.innerHTML = '<div class="msg success">✅ Sahi jawab!</div>';
+  const isLast = currentQuestionIndex === currentVideo.questions.length - 1;
+  if (!isLast) {
+    msgEl.innerHTML = '<div class="msg success">✅ Sahi jawab! Agla sawaal...</div>';
+    setTimeout(() => {
+      currentQuestionIndex++;
+      showQuiz();
+    }, 1200);
+    return;
+  }
+
+  msgEl.innerHTML = '<div class="msg success">✅ Sahi jawab! Saare sawaal poore ho gaye!</div>';
   document.getElementById('claimCard').classList.remove('hidden');
 }
 
@@ -496,6 +556,14 @@ async function loadWinners() {
 }
 
 // ---------- IMAGE UPLOAD (Supabase Storage) ----------
+function previewImage(inputEl, previewId) {
+  const file = inputEl.files[0];
+  const imgEl = document.getElementById(previewId);
+  if (!file) { imgEl.classList.add('hidden'); return; }
+  imgEl.src = URL.createObjectURL(file);
+  imgEl.classList.remove('hidden');
+}
+
 async function uploadImageIfSelected(inputId) {
   const fileInput = document.getElementById(inputId);
   const file = fileInput.files[0];
@@ -563,6 +631,7 @@ async function addVideo() {
   msgEl.innerHTML = '<div class="msg success">✅ Video, question aur photos add ho gayi!</div>';
   ['newVideoUrl','newVideoTitle','newQuestion','optA','optB','optC','optD'].forEach(id => document.getElementById(id).value = '');
   ['newQuestionImage','optAImage','optBImage','optCImage','optDImage'].forEach(id => document.getElementById(id).value = '');
+  ['newQuestionImagePreview','optAImagePreview','optBImagePreview','optCImagePreview','optDImagePreview'].forEach(id => document.getElementById(id).classList.add('hidden'));
   loadAdminData();
 }
 
@@ -577,7 +646,9 @@ async function loadAdminData() {
   adminVideosCache = videos || [];
   const listEl = document.getElementById('adminVideoList');
   const selectEl = document.getElementById('linkVideoSelect');
+  const addQSelectEl = document.getElementById('addQVideoSelect');
   selectEl.innerHTML = '';
+  addQSelectEl.innerHTML = '';
   listEl.innerHTML = '';
 
   adminVideosCache.forEach(v => {
@@ -585,12 +656,58 @@ async function loadAdminData() {
     opt.value = v.id; opt.innerText = v.title;
     selectEl.appendChild(opt);
 
+    const opt2 = document.createElement('option');
+    opt2.value = v.id; opt2.innerText = v.title;
+    addQSelectEl.appendChild(opt2);
+
     const row = document.createElement('div');
     row.className = 'winner-row';
     row.innerHTML = `<span>${v.title}</span><span class="small">${v.active ? 'Active' : 'Inactive'}</span>`;
     listEl.appendChild(row);
   });
   if (adminVideosCache.length) showVideoLink();
+}
+
+async function addQuestionToVideo() {
+  const videoId = document.getElementById('addQVideoSelect').value;
+  const question = document.getElementById('addQQuestion').value.trim();
+  const a = document.getElementById('addQOptA').value.trim();
+  const b = document.getElementById('addQOptB').value.trim();
+  const c = document.getElementById('addQOptC').value.trim();
+  const d = document.getElementById('addQOptD').value.trim();
+  const correct = document.getElementById('addQCorrectOpt').value;
+  const msgEl = document.getElementById('addQMsg');
+
+  if (!videoId || !question || !a || !b || !c || !d) {
+    msgEl.innerHTML = '<div class="msg error">Sab fields bharo</div>';
+    return;
+  }
+
+  msgEl.innerHTML = '<div class="small">Photos upload ho rahi hain, thoda ruko...</div>';
+
+  const [questionImage, aImg, bImg, cImg, dImg] = await Promise.all([
+    uploadImageIfSelected('addQQuestionImage'),
+    uploadImageIfSelected('addQOptAImage'),
+    uploadImageIfSelected('addQOptBImage'),
+    uploadImageIfSelected('addQOptCImage'),
+    uploadImageIfSelected('addQOptDImage')
+  ]);
+
+  const { error } = await sb.from('questions').insert({
+    video_id: videoId, question, question_image: questionImage,
+    option_a: a, option_a_image: aImg,
+    option_b: b, option_b_image: bImg,
+    option_c: c, option_c_image: cImg,
+    option_d: d, option_d_image: dImg,
+    correct_option: correct
+  });
+
+  if (error) { msgEl.innerHTML = '<div class="msg error">Question add nahi hua</div>'; return; }
+
+  msgEl.innerHTML = '<div class="msg success">✅ Question add ho gaya!</div>';
+  ['addQQuestion','addQOptA','addQOptB','addQOptC','addQOptD'].forEach(id => document.getElementById(id).value = '');
+  ['addQQuestionImage','addQOptAImage','addQOptBImage','addQOptCImage','addQOptDImage'].forEach(id => document.getElementById(id).value = '');
+  ['addQQuestionImagePreview','addQOptAImagePreview','addQOptBImagePreview','addQOptCImagePreview','addQOptDImagePreview'].forEach(id => document.getElementById(id).classList.add('hidden'));
 }
 
 function showVideoLink() {
