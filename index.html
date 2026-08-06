@@ -148,6 +148,13 @@
     <button onclick="checkWallet()">Check Karo</button>
     <div id="walletCheckMsg"></div>
   </div>
+  <div class="card hidden" id="withdrawCard">
+    <div class="video-title">💸 Paise Nikaalo (Withdraw)</div>
+    <p class="small" style="margin-bottom:10px;">Minimum withdrawal: ₹10. Apna UPI ID daalo — paisa manually verify karke bheja jaayega.</p>
+    <input type="text" id="withdrawUpi" placeholder="UPI ID (jaise naam@paytm)">
+    <button onclick="requestWithdrawal()">Withdrawal Request Bhejo</button>
+    <div id="withdrawMsg"></div>
+  </div>
 </div>
 
 <div class="tabbar" id="tabbar">
@@ -202,7 +209,7 @@
       <option value="d">Sahi jawab: D</option>
     </select>
     <input type="number" id="newDailyCap" placeholder="Roz max kitne winners (jaise 50)" value="50">
-    <button onclick="addVideo()">Video Add Karo</button>
+    <button onclick="addVideo()">💾 Quiz Save Karo</button>
     <div id="addVideoMsg"></div>
   </div>
 
@@ -251,6 +258,21 @@
     <div class="video-title">📋 Sab Videos</div>
     <div id="adminVideoList" class="loading">Loading...</div>
   </div>
+
+  <div class="card">
+    <div class="video-title">🏦 Reward Budget</div>
+    <div id="budgetDisplay" class="msg success" style="margin-bottom:10px;">Budget: loading...</div>
+    <p class="small" style="margin-bottom:10px;">Jitna paisa yahan add karoge, utne hi rewards distribute honge. Budget khatam = rewards automatically ruk jaayenge.</p>
+    <input type="number" id="budgetAddAmount" placeholder="Kitna paisa add karna hai (₹)">
+    <button onclick="addBudget()">💰 Budget Add Karo</button>
+    <div id="budgetMsg"></div>
+  </div>
+
+  <div class="card">
+    <div class="video-title">💸 Pending Withdrawals</div>
+    <p class="small" style="margin-bottom:10px;">UPI pe paisa bhejne ke baad "Paid" dabao</p>
+    <div id="adminWithdrawList" class="loading">Loading...</div>
+  </div>
 </div>
 
 <script>
@@ -258,7 +280,13 @@
 const SUPABASE_URL = "https://btkcevukhpqkikfrhezm.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0a2NldnVraHBxa2lrZnJoZXptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5MjA3NzYsImV4cCI6MjEwMTQ5Njc3Nn0.OtHExuW2funzG-5Oo4kM4d1PzS6o-lr3H5Cjjp-ysKU";
 const ADMIN_PASSWORD = "change_this_password";
-const REWARD_AMOUNT = 2;
+// Reward tiers: pehle TIER1_COUNT winners ko TIER1_AMOUNT, uske baad TIER2_COUNT ko TIER2_AMOUNT
+const TIER1_COUNT = 10;
+const TIER1_AMOUNT = 10;
+const TIER2_COUNT = 90;
+const TIER2_AMOUNT = 1;
+const MAX_DAILY_WINNERS = TIER1_COUNT + TIER2_COUNT; // 100
+const MIN_WITHDRAWAL = 10;
 // ============================================================================
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -476,10 +504,20 @@ async function claimReward() {
 
   const today = new Date().toISOString().slice(0,10);
 
-  // daily budget cap check (video ke liye max winners set kiya hai admin ne)
+  // kitne winners ho chuke aaj is video pe — isi se tier decide hoga
   const { count: winnersToday } = await sb.from('winners').select('*', { count: 'exact', head: true }).eq('video_id', currentVideo.id).eq('win_date', today);
-  if (currentVideo.daily_cap && winnersToday >= currentVideo.daily_cap) {
-    msgEl.innerHTML = '<div class="msg error">Aaj is video ka reward budget khatam ho gaya, kal try karo</div>';
+  if (winnersToday >= MAX_DAILY_WINNERS) {
+    msgEl.innerHTML = '<div class="msg error">Aaj is video ke saare rewards (100) khatam ho gaye, kal try karo</div>';
+    return;
+  }
+
+  // tier: pehle 10 → ₹10, agle 90 → ₹1
+  const rewardAmount = winnersToday < TIER1_COUNT ? TIER1_AMOUNT : TIER2_AMOUNT;
+
+  // budget check — paisa pool mein hai tabhi reward milega
+  const budgetOk = await deductBudget(rewardAmount);
+  if (!budgetOk) {
+    msgEl.innerHTML = '<div class="msg error">Aaj ka reward budget khatam ho gaya hai, kal try karo</div>';
     return;
   }
 
@@ -490,6 +528,9 @@ async function claimReward() {
   });
 
   if (error) {
+    // entry fail hui toh kata hua budget wapas karo
+    const cur = await getBudget();
+    await sb.from('app_settings').upsert({ key: 'reward_budget', value: String(cur + rewardAmount) });
     if (error.code === '23505') {
       msgEl.innerHTML = '<div class="msg error">Is number se is video ke liye aaj already reward le liya gaya hai</div>';
     } else {
@@ -500,34 +541,81 @@ async function claimReward() {
 
   // guaranteed reward — har sahi jawab wale ko milta hai, chance/draw nahi
   await sb.from('winners').insert({
-    user_id: user.id, video_id: currentVideo.id, reward_amount: REWARD_AMOUNT, win_date: today
+    user_id: user.id, video_id: currentVideo.id, reward_amount: rewardAmount, win_date: today
   });
-  await sb.from('users').update({ wallet_balance: (user.wallet_balance || 0) + REWARD_AMOUNT }).eq('id', user.id);
+  await sb.from('users').update({ wallet_balance: (user.wallet_balance || 0) + rewardAmount }).eq('id', user.id);
 
   const doneKey = 'done_' + today;
   const doneList = JSON.parse(localStorage.getItem(doneKey) || '[]');
   doneList.push(currentVideo.id);
   localStorage.setItem(doneKey, JSON.stringify(doneList));
 
-  msgEl.innerHTML = '<div class="msg success">🎉 ₹' + REWARD_AMOUNT + ' mil gaya! Balance "Balance" tab mein apna number daal ke check karo.</div>';
+  const positionMsg = winnersToday < TIER1_COUNT
+    ? `🎉 Badhai ho! Aap pehle ${TIER1_COUNT} winners mein ho — ₹${rewardAmount} mil gaya!`
+    : `🎉 ₹${rewardAmount} mil gaya!`;
+  msgEl.innerHTML = '<div class="msg success">' + positionMsg + ' Balance "Balance" tab mein apna number daal ke check karo. (Minimum withdrawal: ₹' + MIN_WITHDRAWAL + ')</div>';
   document.getElementById('claimPhone').disabled = true;
   document.querySelector('#claimCard button').disabled = true;
 }
 
 // ---------- WALLET CHECK ----------
+let walletUser = null; // last checked user (withdrawal ke liye)
+
 async function checkWallet() {
   const phone = document.getElementById('walletPhoneInput').value.trim();
   const msgEl = document.getElementById('walletCheckMsg');
+  const withdrawCard = document.getElementById('withdrawCard');
   if (!/^\d{10}$/.test(phone)) {
     msgEl.innerHTML = '<div class="msg error">Sahi 10-digit number daalo</div>';
+    withdrawCard.classList.add('hidden');
     return;
   }
   const { data: user } = await sb.from('users').select('*').eq('phone', phone).maybeSingle();
   if (!user) {
     msgEl.innerHTML = '<div class="msg error">Ye number kisi entry mein nahi mila</div>';
+    withdrawCard.classList.add('hidden');
     return;
   }
-  msgEl.innerHTML = `<div class="msg success">💰 Balance: ₹${user.wallet_balance}</div>`;
+  walletUser = user;
+  const bal = user.wallet_balance || 0;
+  if (bal >= MIN_WITHDRAWAL) {
+    msgEl.innerHTML = `<div class="msg success">💰 Balance: ₹${bal} — withdrawal ke liye eligible!</div>`;
+    withdrawCard.classList.remove('hidden');
+  } else {
+    msgEl.innerHTML = `<div class="msg success">💰 Balance: ₹${bal} (₹${MIN_WITHDRAWAL} hone par withdraw kar sakte ho — ₹${MIN_WITHDRAWAL - bal} aur chahiye)</div>`;
+    withdrawCard.classList.add('hidden');
+  }
+}
+
+async function requestWithdrawal() {
+  const upi = document.getElementById('withdrawUpi').value.trim();
+  const msgEl = document.getElementById('withdrawMsg');
+  if (!walletUser) return;
+  if (!upi || !upi.includes('@')) {
+    msgEl.innerHTML = '<div class="msg error">Sahi UPI ID daalo (jaise naam@paytm)</div>';
+    return;
+  }
+  const bal = walletUser.wallet_balance || 0;
+  if (bal < MIN_WITHDRAWAL) {
+    msgEl.innerHTML = `<div class="msg error">Minimum ₹${MIN_WITHDRAWAL} chahiye withdrawal ke liye</div>`;
+    return;
+  }
+
+  const { error } = await sb.from('withdrawals').insert({
+    user_id: walletUser.id, amount: bal, upi_id: upi, status: 'pending'
+  });
+  if (error) {
+    msgEl.innerHTML = '<div class="msg error">Request fail hui, dobara try karo</div>';
+    return;
+  }
+
+  // balance zero karo (poora amount withdraw request mein chala gaya)
+  await sb.from('users').update({ wallet_balance: 0 }).eq('id', walletUser.id);
+  walletUser.wallet_balance = 0;
+
+  msgEl.innerHTML = `<div class="msg success">✅ ₹${bal} ki withdrawal request bhej di gayi! 24-48 ghante mein aapke UPI pe paisa aa jaayega.</div>`;
+  document.getElementById('withdrawUpi').disabled = true;
+  document.querySelector('#withdrawCard button').disabled = true;
 }
 
 // ---------- WINNERS ----------
@@ -564,15 +652,53 @@ function previewImage(inputEl, previewId) {
   imgEl.classList.remove('hidden');
 }
 
+// photo ko ~50KB tak compress karo (resize + JPEG quality kam karke)
+function compressImage(file, maxSizeKB = 50) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      // pehle resize: max 800px width/height (quiz ke liye kaafi hai)
+      let w = img.width, h = img.height;
+      const maxDim = 800;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+        else { w = Math.round(w * maxDim / h); h = maxDim; }
+      }
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+
+      // quality kam karte jao jab tak ~50KB na ho jaye
+      let quality = 0.8;
+      const tryCompress = () => {
+        canvas.toBlob((blob) => {
+          if (!blob) { resolve(file); return; }
+          if (blob.size <= maxSizeKB * 1024 || quality <= 0.2) {
+            resolve(blob);
+          } else {
+            quality -= 0.1;
+            tryCompress();
+          }
+        }, 'image/jpeg', quality);
+      };
+      tryCompress();
+    };
+    img.onerror = () => resolve(file); // compression fail ho toh original bhej do
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 async function uploadImageIfSelected(inputId) {
   const fileInput = document.getElementById(inputId);
   const file = fileInput.files[0];
   if (!file) return null;
 
-  const ext = file.name.split('.').pop();
-  const path = `${inputId}-${Date.now()}.${ext}`;
+  // automatic compression — badi photo bhi ~50KB ban ke upload hogi
+  const compressed = await compressImage(file, 50);
+  const path = `${inputId}-${Date.now()}.jpg`;
 
-  const { error } = await sb.storage.from('quiz-images').upload(path, file);
+  const { error } = await sb.storage.from('quiz-images').upload(path, compressed, { contentType: 'image/jpeg' });
   if (error) {
     console.error('Upload failed:', error);
     return null;
@@ -628,7 +754,8 @@ async function addVideo() {
 
   if (qErr) { msgEl.innerHTML = '<div class="msg error">Question add nahi hua</div>'; return; }
 
-  msgEl.innerHTML = '<div class="msg success">✅ Video, question aur photos add ho gayi!</div>';
+  const quizLink = window.location.origin + window.location.pathname + '?v=' + video.id;
+  msgEl.innerHTML = `<div class="msg success">✅ Quiz save ho gaya!<br><br><b>🔗 Quiz ka link (YouTube description mein daalo):</b><br><span style="word-break:break-all;">${quizLink}</span><br><br><button style="margin-top:8px;" onclick="navigator.clipboard.writeText('${quizLink}').then(()=>this.innerText='✅ Copy Ho Gaya!')">📋 Link Copy Karo</button></div>`;
   ['newVideoUrl','newVideoTitle','newQuestion','optA','optB','optC','optD'].forEach(id => document.getElementById(id).value = '');
   ['newQuestionImage','optAImage','optBImage','optCImage','optDImage'].forEach(id => document.getElementById(id).value = '');
   ['newQuestionImagePreview','optAImagePreview','optBImagePreview','optCImagePreview','optDImagePreview'].forEach(id => document.getElementById(id).classList.add('hidden'));
@@ -666,6 +793,71 @@ async function loadAdminData() {
     listEl.appendChild(row);
   });
   if (adminVideosCache.length) showVideoLink();
+  loadWithdrawals();
+  loadBudget();
+}
+
+// ---------- BUDGET SYSTEM ----------
+async function getBudget() {
+  const { data } = await sb.from('app_settings').select('*').eq('key', 'reward_budget').maybeSingle();
+  return data ? parseFloat(data.value) : 0;
+}
+
+async function loadBudget() {
+  const budget = await getBudget();
+  const el = document.getElementById('budgetDisplay');
+  if (el) el.innerHTML = `🏦 Available Budget: <b>₹${budget}</b>`;
+}
+
+async function addBudget() {
+  const amt = parseFloat(document.getElementById('budgetAddAmount').value);
+  const msgEl = document.getElementById('budgetMsg');
+  if (!amt || amt <= 0) {
+    msgEl.innerHTML = '<div class="msg error">Sahi amount daalo</div>';
+    return;
+  }
+  const current = await getBudget();
+  const { error } = await sb.from('app_settings').upsert({ key: 'reward_budget', value: String(current + amt) });
+  if (error) {
+    msgEl.innerHTML = '<div class="msg error">Budget add nahi hua, dobara try karo</div>';
+    return;
+  }
+  document.getElementById('budgetAddAmount').value = '';
+  msgEl.innerHTML = `<div class="msg success">✅ ₹${amt} add ho gaya!</div>`;
+  loadBudget();
+}
+
+async function deductBudget(amount) {
+  const current = await getBudget();
+  if (current < amount) return false;
+  await sb.from('app_settings').upsert({ key: 'reward_budget', value: String(current - amount) });
+  return true;
+}
+
+async function loadWithdrawals() {
+  const el = document.getElementById('adminWithdrawList');
+  const { data: withdrawals } = await sb
+    .from('withdrawals')
+    .select('*, users(phone)')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true });
+
+  if (!withdrawals || withdrawals.length === 0) {
+    el.innerHTML = '<div class="small center">Koi pending withdrawal nahi hai</div>';
+    return;
+  }
+  el.innerHTML = '';
+  withdrawals.forEach(w => {
+    const row = document.createElement('div');
+    row.className = 'winner-row';
+    row.innerHTML = `<span>${w.users.phone}<br><span class="small">${w.upi_id} — ₹${w.amount}</span></span><button style="width:auto; padding:6px 14px; font-size:13px;" onclick="markPaid('${w.id}')">Paid ✓</button>`;
+    el.appendChild(row);
+  });
+}
+
+async function markPaid(withdrawalId) {
+  await sb.from('withdrawals').update({ status: 'paid' }).eq('id', withdrawalId);
+  loadWithdrawals();
 }
 
 async function addQuestionToVideo() {
