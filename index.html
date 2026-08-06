@@ -274,6 +274,11 @@
     <p class="small" style="margin-bottom:10px;">UPI pe paisa bhejne ke baad "Paid" dabao</p>
     <div id="adminWithdrawList" class="loading">Loading...</div>
   </div>
+
+  <div class="card">
+    <div class="video-title">✅ Payment History (Paid)</div>
+    <div id="adminPaidList" class="loading">Loading...</div>
+  </div>
 </div>
 
 <script>
@@ -853,21 +858,45 @@ async function loadWithdrawals() {
   const el = document.getElementById('adminWithdrawList');
   const { data: withdrawals } = await sb
     .from('withdrawals')
-    .select('*, users(phone)')
+    .select('*, users(phone, name)')
     .eq('status', 'pending')
     .order('created_at', { ascending: true });
 
   if (!withdrawals || withdrawals.length === 0) {
     el.innerHTML = '<div class="small center">Koi pending withdrawal nahi hai</div>';
-    return;
+  } else {
+    el.innerHTML = '';
+    withdrawals.forEach(w => {
+      const row = document.createElement('div');
+      row.className = 'winner-row';
+      const nm = w.users.name ? w.users.name + ' — ' : '';
+      row.innerHTML = `<span>${nm}${w.users.phone}<br><span class="small">${w.upi_id} — ₹${w.amount}</span></span><button style="width:auto; padding:6px 14px; font-size:13px;" onclick="markPaid('${w.id}')">Paid ✓</button>`;
+      el.appendChild(row);
+    });
   }
-  el.innerHTML = '';
-  withdrawals.forEach(w => {
-    const row = document.createElement('div');
-    row.className = 'winner-row';
-    row.innerHTML = `<span>${w.users.phone}<br><span class="small">${w.upi_id} — ₹${w.amount}</span></span><button style="width:auto; padding:6px 14px; font-size:13px;" onclick="markPaid('${w.id}')">Paid ✓</button>`;
-    el.appendChild(row);
-  });
+
+  // paid history
+  const paidEl = document.getElementById('adminPaidList');
+  const { data: paid } = await sb
+    .from('withdrawals')
+    .select('*, users(phone, name)')
+    .eq('status', 'paid')
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  if (!paid || paid.length === 0) {
+    paidEl.innerHTML = '<div class="small center">Abhi tak koi payment nahi hui</div>';
+  } else {
+    paidEl.innerHTML = '';
+    paid.forEach(w => {
+      const row = document.createElement('div');
+      row.className = 'winner-row';
+      const nm = w.users.name ? w.users.name + ' — ' : '';
+      const dt = new Date(w.created_at).toLocaleDateString('hi-IN');
+      row.innerHTML = `<span>${nm}${w.users.phone}<br><span class="small">${w.upi_id} — ${dt}</span></span><span class="badge win">₹${w.amount} ✓</span>`;
+      paidEl.appendChild(row);
+    });
+  }
 }
 
 async function markPaid(withdrawalId) {
@@ -889,7 +918,18 @@ async function deleteVideo(videoId) {
     return;
   }
   pendingDeleteId = null;
-  await sb.from('videos').delete().eq('id', videoId);
+
+  // pehle is video se jude records delete karo (winners, entries, questions), phir video
+  await sb.from('winners').delete().eq('video_id', videoId);
+  await sb.from('entries').delete().eq('video_id', videoId);
+  await sb.from('questions').delete().eq('video_id', videoId);
+  const { error } = await sb.from('videos').delete().eq('id', videoId);
+  if (error) {
+    alert = null; // no-op
+    const el = document.getElementById('adminVideoList');
+    el.insertAdjacentHTML('afterbegin', '<div class="msg error">Delete fail hua: ' + (error.message || 'unknown') + '</div>');
+    return;
+  }
   loadAdminData();
 }
 
