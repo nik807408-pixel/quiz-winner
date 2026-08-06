@@ -789,7 +789,7 @@ async function loadAdminData() {
 
     const row = document.createElement('div');
     row.className = 'winner-row';
-    row.innerHTML = `<span>${v.title}</span><span class="small">${v.active ? 'Active' : 'Inactive'}</span>`;
+    row.innerHTML = `<span>${v.title}</span><button style="width:auto; padding:6px 12px; font-size:13px; background:var(--danger); color:#fff;" onclick="deleteVideo('${v.id}')">🗑️ Delete</button>`;
     listEl.appendChild(row);
   });
   if (adminVideosCache.length) showVideoLink();
@@ -858,6 +858,24 @@ async function loadWithdrawals() {
 async function markPaid(withdrawalId) {
   await sb.from('withdrawals').update({ status: 'paid' }).eq('id', withdrawalId);
   loadWithdrawals();
+}
+
+let pendingDeleteId = null;
+async function deleteVideo(videoId) {
+  // custom 2-step confirm (native confirm() webview mein block hota hai)
+  if (pendingDeleteId !== videoId) {
+    pendingDeleteId = videoId;
+    const btns = document.querySelectorAll(`button[onclick="deleteVideo('${videoId}')"]`);
+    btns.forEach(b => b.innerText = '⚠️ Pakka? Dobara dabao');
+    setTimeout(() => {
+      pendingDeleteId = null;
+      btns.forEach(b => b.innerText = '🗑️ Delete');
+    }, 4000);
+    return;
+  }
+  pendingDeleteId = null;
+  await sb.from('videos').delete().eq('id', videoId);
+  loadAdminData();
 }
 
 async function addQuestionToVideo() {
