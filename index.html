@@ -123,6 +123,7 @@
   <div class="card hidden" id="claimCard">
     <div class="video-title">🎉 Sahi Jawab! Reward claim karne ke liye number daalo</div>
     <p class="small" style="margin-bottom:12px;">Pehle 10 winners ko ₹10, uske baad ₹1 — reward isi number pe track hoga</p>
+    <input type="text" id="claimName" placeholder="Apna naam (winners list mein dikhega)">
     <input type="tel" id="claimPhone" placeholder="10-digit mobile number" maxlength="10">
     <label style="display:flex; align-items:flex-start; gap:8px; margin-bottom:12px; cursor:pointer;">
       <input type="checkbox" id="consentCheckbox" style="width:auto; margin:2px 0 0 0;">
@@ -485,8 +486,13 @@ async function submitAnswer() {
 
 // ---------- CLAIM REWARD (phone sirf ab, jab reward mil raha ho) ----------
 async function claimReward() {
+  const name = document.getElementById('claimName').value.trim();
   const phone = document.getElementById('claimPhone').value.trim();
   const msgEl = document.getElementById('claimMsg');
+  if (!name) {
+    msgEl.innerHTML = '<div class="msg error">Apna naam daalo</div>';
+    return;
+  }
   if (!/^\d{10}$/.test(phone)) {
     msgEl.innerHTML = '<div class="msg error">Sahi 10-digit number daalo</div>';
     return;
@@ -501,6 +507,9 @@ async function claimReward() {
     msgEl.innerHTML = '<div class="msg error">Kuch gadbad hui, dobara try karo</div>';
     return;
   }
+
+  // naam save/update karo
+  await sb.from('users').update({ name }).eq('id', user.id);
 
   const today = new Date().toISOString().slice(0,10);
 
@@ -551,15 +560,21 @@ async function claimReward() {
   localStorage.setItem(doneKey, JSON.stringify(doneList));
 
   const positionMsg = winnersToday < TIER1_COUNT
-    ? `🎉 Badhai ho! Aap pehle ${TIER1_COUNT} winners mein ho — ₹${rewardAmount} mil gaya!`
+    ? `🎉 Badhai ho ${name}! Aap pehle ${TIER1_COUNT} winners mein ho — ₹${rewardAmount} mil gaya!`
     : `🎉 ₹${rewardAmount} mil gaya!`;
-  msgEl.innerHTML = '<div class="msg success">' + positionMsg + ' Balance "Balance" tab mein apna number daal ke check karo. (Minimum withdrawal: ₹' + MIN_WITHDRAWAL + ')</div>';
+  msgEl.innerHTML = '<div class="msg success">' + positionMsg + ' (Minimum withdrawal: ₹' + MIN_WITHDRAWAL + ')</div><button style="margin-top:8px;" onclick="goToWithdraw(\'' + phone + '\')">💸 Balance Dekho / Withdraw Karo</button>';
   document.getElementById('claimPhone').disabled = true;
   document.querySelector('#claimCard button').disabled = true;
 }
 
 // ---------- WALLET CHECK ----------
 let walletUser = null; // last checked user (withdrawal ke liye)
+
+function goToWithdraw(phone) {
+  showTab('wallet');
+  document.getElementById('walletPhoneInput').value = phone;
+  checkWallet();
+}
 
 async function checkWallet() {
   const phone = document.getElementById('walletPhoneInput').value.trim();
@@ -625,7 +640,7 @@ async function loadWinners() {
   const today = new Date().toISOString().slice(0,10);
   const { data: winners } = await sb
     .from('winners')
-    .select('*, users(phone), videos(title)')
+    .select('*, users(phone, name), videos(title)')
     .eq('win_date', today)
     .order('created_at', { ascending: false });
 
@@ -635,10 +650,10 @@ async function loadWinners() {
   }
   el.innerHTML = '';
   winners.forEach(w => {
-    const maskedPhone = w.users.phone.slice(0,2) + 'XXXXXX' + w.users.phone.slice(-2);
+    const displayName = w.users.name || (w.users.phone.slice(0,2) + 'XXXXXX' + w.users.phone.slice(-2));
     const row = document.createElement('div');
     row.className = 'winner-row';
-    row.innerHTML = `<span>${maskedPhone} — ${w.videos.title}</span><span class="badge win">+₹${w.reward_amount}</span>`;
+    row.innerHTML = `<span>🏅 ${displayName} — ${w.videos.title}</span><span class="badge win">+₹${w.reward_amount}</span>`;
     el.appendChild(row);
   });
 }
